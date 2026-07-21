@@ -1,6 +1,30 @@
 let originalSpeed = null;
 let smoothSeekEndTime = 0;
 
+// --- 拡張機能の設定データ ---
+let userSettings = { uiOpacity: 1.0, enableNico: false };
+let settingsLoaded = false;
+
+// 設定の読み込みとリアルタイム監視
+chrome.storage.sync.get({ uiOpacity: 1.0, enableNico: false }, (items) => {
+  userSettings = items;
+  settingsLoaded = true;
+  document.documentElement.style.setProperty('--ypc-hover-opacity', userSettings.uiOpacity);
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync') {
+    if (changes.uiOpacity) {
+      userSettings.uiOpacity = changes.uiOpacity.newValue;
+      document.documentElement.style.setProperty('--ypc-hover-opacity', userSettings.uiOpacity);
+    }
+    if (changes.enableNico) {
+      userSettings.enableNico = changes.enableNico.newValue;
+    }
+  }
+});
+
+
 // --- カクつきを防ぐ「スムーズシーク」機能 ---
 function performSmoothSeek(video, amount) {
   const now = Date.now();
@@ -43,7 +67,6 @@ function performSmoothSeek(video, amount) {
   }
 }
 
-// 最小化時の対策
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && originalSpeed !== null) {
     const video = document.querySelector('video');
@@ -55,13 +78,33 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// --- UIをYouTubeプレイヤー内に注入する機能 ---
+// --- UIをプレイヤー内に注入する機能 ---
 function injectPlayerUI() {
-  const playerContainer = document.querySelector('.html5-video-player');
-  const video = document.querySelector('video');
-  if (!playerContainer || !video) return;
+  if (!settingsLoaded) return; // 設定が読み込まれるまで待つ
 
-  // YouTube側で動画要素が再生成された時のためのイベント再登録処理
+  const video = document.querySelector('video');
+  if (!video) return;
+
+  const isYouTube = window.location.hostname.includes('youtube.com');
+  const isNiconico = window.location.hostname.includes('nicovideo.jp');
+
+  // ニコニコ動画で設定がOFFの場合は、UIがあれば削除して終了
+  if (isNiconico && !userSettings.enableNico) {
+    const existingContainer = document.getElementById('ypc-container');
+    if (existingContainer) existingContainer.remove();
+    return;
+  }
+
+  let playerContainer;
+  if (isYouTube) {
+    playerContainer = document.querySelector('.html5-video-player');
+  } else if (isNiconico) {
+    playerContainer = video.parentElement; 
+  }
+
+  if (!playerContainer) return;
+  if (document.getElementById('ypc-container')) return;
+
   if (!video.dataset.ypcEventsBound) {
     video.dataset.ypcEventsBound = 'true';
     
@@ -75,20 +118,27 @@ function injectPlayerUI() {
       video.loop = true;
     }
 
-    video.addEventListener('ratechange', () => {
-      const speedSlider = document.getElementById('ypc-speed-slider');
-      const speedDisplay = document.getElementById('ypc-speed-display');
-      if (speedSlider && speedDisplay && originalSpeed === null) {
-        speedDisplay.innerText = video.playbackRate.toFixed(2) + 'x';
-        speedSlider.value = video.playbackRate;
-      }
+    if (isYouTube) {
+      video.addEventListener('ratechange', () => {
+        const speedSlider = document.getElementById('ypc-speed-slider');
+        const speedDisplay = document.getElementById('ypc-speed-display');
+        if (speedSlider && speedDisplay && originalSpeed === null) {
+          speedDisplay.innerText = video.playbackRate.toFixed(2) + 'x';
+          speedSlider.value = video.playbackRate;
+        }
+      });
+    }
+
+    video.addEventListener('play', () => {
+      const btn = document.getElementById('ypc-play-pause');
+      if (btn) btn.innerText = '⏸';
+    });
+    video.addEventListener('pause', () => {
+      const btn = document.getElementById('ypc-play-pause');
+      if (btn) btn.innerText = '▶';
     });
   }
 
-  // すでにUIが存在する場合は再生成しない
-  if (document.getElementById('ypc-container')) return;
-
-  // CSSの注入
   if (!document.getElementById('ypc-styles')) {
     const style = document.createElement('style');
     style.id = 'ypc-styles';
@@ -102,11 +152,11 @@ function injectPlayerUI() {
         background: rgba(28, 28, 28, 0.85);
         backdrop-filter: blur(4px);
         color: #eee;
-        padding: 12px 20px; /* 余白を調整 */
+        padding: 12px 20px;
         border-radius: 8px;
         display: flex;
-        flex-direction: column; /* ★ 縦並びに変更 */
-        gap: 12px; /* 上下段の間隔 */
+        flex-direction: column;
+        gap: 12px;
         align-items: center;
         font-family: "YouTube Noto", Roboto, sans-serif;
         font-size: 15px;
@@ -114,15 +164,16 @@ function injectPlayerUI() {
         transition: opacity 0.2s ease-in-out;
         box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         border: 1px solid rgba(255,255,255,0.1);
+        width: max-content; 
       }
-      .html5-video-player:hover #ypc-container {
-        opacity: 1;
-      }
-      /* ★ 行ごとのコンテナを追加 */
+      /* ★ 透明度を変数から読み込むように変更 */
+      .html5-video-player:hover #ypc-container { opacity: var(--ypc-hover-opacity, 1.0); }
+      #ypc-container:hover { opacity: var(--ypc-hover-opacity, 1.0); }
+      
       .ypc-row {
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start; 
         gap: 20px;
         width: 100%;
       }
@@ -151,23 +202,18 @@ function injectPlayerUI() {
       .ypc-btn:hover { background: rgba(255, 255, 255, 0.25); }
       .ypc-btn:active { background: rgba(255, 255, 255, 0.4); }
       
-      .ypc-btn.active-loop {
-        background: rgba(204, 0, 0, 0.8);
-      }
-      .ypc-btn.active-loop:hover {
-        background: rgba(255, 50, 50, 0.9);
-      }
+      .ypc-btn.active-loop { background: rgba(204, 0, 0, 0.8); }
+      .ypc-btn.active-loop:hover { background: rgba(255, 50, 50, 0.9); }
 
       #ypc-speed-slider {
         cursor: pointer;
-        width: 100px; /* スライダーを少しだけ長くして調整しやすくしました */
+        width: 100px;
         accent-color: #f00;
       }
     `;
     document.head.appendChild(style);
   }
 
-  // UIコンテナの作成
   const container = document.createElement('div');
   container.id = 'ypc-container';
   
@@ -175,10 +221,22 @@ function injectPlayerUI() {
     container.addEventListener(eventType, (e) => e.stopPropagation());
   });
 
-  // UIのHTML構造 (上段: Adjust, 下段: Speed & Loop に分割)
+  const speedUI = isYouTube ? `
+    <div class="ypc-group">
+      <span class="ypc-label">Speed:</span>
+      <button class="ypc-btn" id="ypc-speed-down">-0.01</button>
+      <span id="ypc-speed-display" style="width: 48px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15px; font-weight: bold;">1.00x</span>
+      <button class="ypc-btn" id="ypc-speed-up">+0.01</button>
+      <input type="range" id="ypc-speed-slider" min="0.1" max="4.0" step="0.01" value="1.0" style="margin-left: 8px;">
+      <button class="ypc-btn" id="ypc-speed-reset">Reset</button>
+    </div>
+  ` : '';
+
+  const loopBorderStyle = isYouTube ? "border-left: 1px solid #555; padding-left: 20px;" : "";
+
   container.innerHTML = `
-    <!-- 上段：時間調整 -->
     <div class="ypc-row">
+      <button class="ypc-btn" id="ypc-play-pause" style="width: 40px;">▶</button>
       <div class="ypc-group">
         <span class="ypc-label">Adjust:</span>
         <button class="ypc-btn ypc-seek" data-val="-5">-5s</button>
@@ -189,18 +247,9 @@ function injectPlayerUI() {
         <button class="ypc-btn ypc-seek" data-val="0.1">+0.1s</button>
       </div>
     </div>
-    
-    <!-- 下段：速度調整＆ループ -->
     <div class="ypc-row">
-      <div class="ypc-group">
-        <span class="ypc-label">Speed:</span>
-        <button class="ypc-btn" id="ypc-speed-down">-0.01</button>
-        <span id="ypc-speed-display" style="width: 48px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15px; font-weight: bold;">1.00x</span>
-        <button class="ypc-btn" id="ypc-speed-up">+0.01</button>
-        <input type="range" id="ypc-speed-slider" min="0.1" max="4.0" step="0.01" value="1.0" style="margin-left: 8px;">
-        <button class="ypc-btn" id="ypc-speed-reset">Reset</button>
-      </div>
-      <div class="ypc-group" style="border-left: 1px solid #555; padding-left: 20px;">
+      ${speedUI}
+      <div class="ypc-group" style="${loopBorderStyle} margin-left: auto;">
         <button class="ypc-btn" id="ypc-loop-toggle" style="min-width: 90px;">Loop: OFF</button>
       </div>
     </div>
@@ -208,9 +257,16 @@ function injectPlayerUI() {
 
   playerContainer.appendChild(container);
 
-  // --- イベントリスナーの登録 ---
+  const playPauseBtn = container.querySelector('#ypc-play-pause');
+  playPauseBtn.innerText = video.paused ? '▶' : '⏸'; 
+  playPauseBtn.addEventListener('click', () => {
+    if (video.paused) {
+      video.play();
+    } else {
+      video.pause();
+    }
+  });
 
-  // 1. シークボタンの処理
   container.querySelectorAll('.ypc-seek').forEach(btn => {
     btn.addEventListener('click', () => {
       const val = parseFloat(btn.getAttribute('data-val'));
@@ -222,40 +278,45 @@ function injectPlayerUI() {
     });
   });
 
-  // 2. 速度調整の処理
-  const speedSlider = container.querySelector('#ypc-speed-slider');
-  const speedDisplay = container.querySelector('#ypc-speed-display');
+  if (isYouTube) {
+    const speedSlider = container.querySelector('#ypc-speed-slider');
+    const speedDisplay = container.querySelector('#ypc-speed-display');
 
-  const updateSpeed = (newSpeed) => {
-    newSpeed = Math.round(newSpeed * 100) / 100;
-    
-    if (newSpeed < 0.1) newSpeed = 0.1;
-    if (newSpeed > 16.0) newSpeed = 16.0;
+    const updateSpeed = (newSpeed) => {
+      newSpeed = Math.round(newSpeed * 100) / 100;
+      if (newSpeed < 0.1) newSpeed = 0.1;
+      if (newSpeed > 16.0) newSpeed = 16.0;
 
-    if (originalSpeed !== null) {
-      originalSpeed = newSpeed;
-    } else {
-      video.playbackRate = newSpeed;
-    }
-    speedDisplay.innerText = newSpeed.toFixed(2) + 'x';
-    speedSlider.value = newSpeed;
-  };
+      if (originalSpeed !== null) {
+        originalSpeed = newSpeed;
+      } else {
+        video.playbackRate = newSpeed;
+      }
+      speedDisplay.innerText = newSpeed.toFixed(2) + 'x';
+      speedSlider.value = newSpeed;
+    };
 
-  speedSlider.addEventListener('input', (e) => updateSpeed(parseFloat(e.target.value)));
-  container.querySelector('#ypc-speed-reset').addEventListener('click', () => updateSpeed(1.0));
+    speedSlider.addEventListener('input', (e) => updateSpeed(parseFloat(e.target.value)));
+    container.querySelector('#ypc-speed-reset').addEventListener('click', () => updateSpeed(1.0));
+    container.querySelector('#ypc-speed-down').addEventListener('click', () => {
+      const currentSpeed = originalSpeed !== null ? originalSpeed : video.playbackRate;
+      updateSpeed(currentSpeed - 0.01);
+    });
+    container.querySelector('#ypc-speed-up').addEventListener('click', () => {
+      const currentSpeed = originalSpeed !== null ? originalSpeed : video.playbackRate;
+      updateSpeed(currentSpeed + 0.01);
+    });
+    speedSlider.addEventListener('wheel', (e) => {
+      e.preventDefault(); 
+      const currentSpeed = originalSpeed !== null ? originalSpeed : video.playbackRate;
+      if (e.deltaY < 0) {
+        updateSpeed(currentSpeed + 0.01); 
+      } else {
+        updateSpeed(currentSpeed - 0.01); 
+      }
+    });
+  }
 
-  container.querySelector('#ypc-speed-down').addEventListener('click', () => {
-    const currentSpeed = originalSpeed !== null ? originalSpeed : video.playbackRate;
-    updateSpeed(currentSpeed - 0.01);
-  });
-
-  container.querySelector('#ypc-speed-up').addEventListener('click', () => {
-    const currentSpeed = originalSpeed !== null ? originalSpeed : video.playbackRate;
-    updateSpeed(currentSpeed + 0.01);
-  });
-
-
-  // 3. ループボタンの処理
   const loopBtn = container.querySelector('#ypc-loop-toggle');
   let isAutoLoop = localStorage.getItem('ypc-auto-loop') === 'true';
 
@@ -279,5 +340,4 @@ function injectPlayerUI() {
   });
 }
 
-// UIの定期チェックと注入
 setInterval(injectPlayerUI, 1000);

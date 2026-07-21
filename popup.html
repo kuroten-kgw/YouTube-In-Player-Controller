@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>設定</title>
+  <style>
+    body { font-family: "YouTube Noto", Roboto, sans-serif; padding: 15px; width: 300px; color: #333; margin: 0; }
+    h3 { margin-top: 0; border-bottom: 2px solid #f00; padding-bottom: 8px; font-size: 16px; }
+    .setting-group { margin-bottom: 20px; }
+    label { display: block; font-weight: bold; margin-bottom: 5px; cursor: pointer; font-size: 14px; }
+    .note { font-size: 11px; color: #d32f2f; margin-top: 6px; line-height: 1.4; background: #ffebee; padding: 8px; border-radius: 4px; }
+    input[type="range"] { width: 100%; cursor: pointer; accent-color: #f00; }
+    button { background: #000; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; font-size: 14px; }
+    button:hover { background: #333; }
+  </style>
+</head>
+<body>
+  <h3>拡張機能の設定</h3>
+
+  <div class="setting-group">
+    <label for="opacity-slider">UIの透明度: <span id="opacity-val">1.0</span></label>
+    <input type="range" id="opacity-slider" min="0.1" max="1.0" step="0.1" value="1.0">
+  </div>
+
+  <div class="setting-group">
+    <label>
+      <input type="checkbox" id="nico-enable"> ニコニコ動画でもUIを表示
+    </label>
+    <div class="note">
+      ※ニコニコ動画ではシーク時の同期バグ等の仕様があるため、初期設定は「OFF」です。
+    </div>
+  </div>
+
+  <button id="save-btn">保存して閉じる</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>
