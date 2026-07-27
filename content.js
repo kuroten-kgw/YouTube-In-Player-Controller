@@ -2,27 +2,45 @@ let originalSpeed = null;
 let smoothSeekEndTime = 0;
 
 // --- 拡張機能の設定データ ---
-let userSettings = { uiOpacity: 1.0, enableNico: false };
+let userSettings = { masterEnable: true, uiOpacity: 1.0, enableNico: false };
 let settingsLoaded = false;
 
 // 設定の読み込みとリアルタイム監視
-chrome.storage.sync.get({ uiOpacity: 1.0, enableNico: false }, (items) => {
+chrome.storage.sync.get({ masterEnable: true, uiOpacity: 1.0, enableNico: false }, (items) => {
   userSettings = items;
   settingsLoaded = true;
   document.documentElement.style.setProperty('--ypc-hover-opacity', userSettings.uiOpacity);
+  
+  // ロード時にOFFなら即座に消す
+  if (!userSettings.masterEnable) removePlayerUI();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync') {
+    if (changes.masterEnable) {
+      userSettings.masterEnable = changes.masterEnable.newValue;
+      if (!userSettings.masterEnable) {
+        removePlayerUI(); // OFFにされた瞬間にUIを削除
+      }
+    }
     if (changes.uiOpacity) {
       userSettings.uiOpacity = changes.uiOpacity.newValue;
       document.documentElement.style.setProperty('--ypc-hover-opacity', userSettings.uiOpacity);
     }
     if (changes.enableNico) {
       userSettings.enableNico = changes.enableNico.newValue;
+      if (!userSettings.enableNico && window.location.hostname.includes('nicovideo.jp')) {
+        removePlayerUI();
+      }
     }
   }
 });
+
+// UIを削除する関数
+function removePlayerUI() {
+  const existingContainer = document.getElementById('ypc-container');
+  if (existingContainer) existingContainer.remove();
+}
 
 
 // --- カクつきを防ぐ「スムーズシーク」機能 ---
@@ -80,7 +98,9 @@ document.addEventListener('visibilitychange', () => {
 
 // --- UIをプレイヤー内に注入する機能 ---
 function injectPlayerUI() {
-  if (!settingsLoaded) return; // 設定が読み込まれるまで待つ
+  if (!settingsLoaded) return;
+  // ★マスター機能がOFFの場合は何もしない
+  if (!userSettings.masterEnable) return; 
 
   const video = document.querySelector('video');
   if (!video) return;
@@ -88,10 +108,8 @@ function injectPlayerUI() {
   const isYouTube = window.location.hostname.includes('youtube.com');
   const isNiconico = window.location.hostname.includes('nicovideo.jp');
 
-  // ニコニコ動画で設定がOFFの場合は、UIがあれば削除して終了
   if (isNiconico && !userSettings.enableNico) {
-    const existingContainer = document.getElementById('ypc-container');
-    if (existingContainer) existingContainer.remove();
+    removePlayerUI();
     return;
   }
 
@@ -148,6 +166,7 @@ function injectPlayerUI() {
         bottom: 60px;
         left: 50%;
         transform: translateX(-50%);
+        transform-origin: bottom center; 
         z-index: 9999;
         background: rgba(28, 28, 28, 0.85);
         backdrop-filter: blur(4px);
@@ -166,7 +185,6 @@ function injectPlayerUI() {
         border: 1px solid rgba(255,255,255,0.1);
         width: max-content; 
       }
-      /* ★ 透明度を変数から読み込むように変更 */
       .html5-video-player:hover #ypc-container { opacity: var(--ypc-hover-opacity, 1.0); }
       #ypc-container:hover { opacity: var(--ypc-hover-opacity, 1.0); }
       
@@ -256,6 +274,18 @@ function injectPlayerUI() {
   `;
 
   playerContainer.appendChild(container);
+
+  const resizeObserver = new ResizeObserver(entries => {
+    for (let entry of entries) {
+      const width = entry.contentRect.width;
+      let scale = width / 800;
+      if (scale > 1.0) scale = 1.0;
+      if (scale < 0.5) scale = 0.5;
+      
+      container.style.transform = `translateX(-50%) scale(${scale})`;
+    }
+  });
+  resizeObserver.observe(playerContainer);
 
   const playPauseBtn = container.querySelector('#ypc-play-pause');
   playPauseBtn.innerText = video.paused ? '▶' : '⏸'; 
