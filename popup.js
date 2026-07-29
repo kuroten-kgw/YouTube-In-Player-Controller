@@ -1,74 +1,96 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // ★重要：ここをご自身のGitHubに合わせて書き換えてください！
-  // 例: "ユーザー名/リポジトリ名"
+  // リポジトリ名を設定済み
   const GITHUB_REPO = "kuroten-kgw/YouTube-In-Player-Controller"; 
 
   const masterEnableCb = document.getElementById('master-enable');
+  const posSlider = document.getElementById('pos-slider');
+  const posVal = document.getElementById('pos-val');
   const opacitySlider = document.getElementById('opacity-slider');
   const opacityVal = document.getElementById('opacity-val');
   const nicoEnableCb = document.getElementById('nico-enable');
-  const saveBtn = document.getElementById('save-btn');
+  const closeBtn = document.getElementById('close-btn');
   
   const updateBtn = document.getElementById('update-btn');
   const updateStatus = document.getElementById('update-status');
 
-  opacitySlider.addEventListener('input', () => {
-    opacityVal.textContent = opacitySlider.value;
-  });
+  // ★ sync.set から local.set に変更（回数制限を回避）
+  const saveSettingsInstantly = () => {
+    chrome.storage.local.set({
+      masterEnable: masterEnableCb.checked,
+      uiPosition: parseInt(posSlider.value, 10), 
+      uiOpacity: parseFloat(opacitySlider.value),
+      enableNico: nicoEnableCb.checked
+    });
+  };
 
-  // 保存されている設定を読み込む
-  chrome.storage.sync.get({
-    masterEnable: true, // 初期値はON
+  // ★ sync.get から local.get に変更
+  chrome.storage.local.get({
+    masterEnable: true,
+    uiPosition: 15, 
     uiOpacity: 1.0,
     enableNico: false
   }, (items) => {
     masterEnableCb.checked = items.masterEnable;
+    posSlider.value = items.uiPosition;
+    posVal.textContent = items.uiPosition;
     opacitySlider.value = items.uiOpacity;
     opacityVal.textContent = items.uiOpacity.toFixed(1);
     nicoEnableCb.checked = items.enableNico;
   });
 
-  // 保存ボタン
-  saveBtn.addEventListener('click', () => {
-    chrome.storage.sync.set({
-      masterEnable: masterEnableCb.checked,
-      uiOpacity: parseFloat(opacitySlider.value),
-      enableNico: nicoEnableCb.checked
-    }, () => {
-      window.close();
-    });
+  masterEnableCb.addEventListener('change', saveSettingsInstantly);
+  nicoEnableCb.addEventListener('change', saveSettingsInstantly);
+  
+  posSlider.addEventListener('input', () => { 
+    posVal.textContent = posSlider.value; 
+    saveSettingsInstantly();
+  });
+  
+  opacitySlider.addEventListener('input', () => { 
+    opacityVal.textContent = opacitySlider.value; 
+    saveSettingsInstantly();
   });
 
-  // アップデート確認ボタン
-  updateBtn.addEventListener('click', async () => {
-    if (GITHUB_REPO === "YOUR_GITHUB_NAME/YOUR_REPO_NAME") {
-      updateStatus.innerHTML = "<span style='color:red;'>※コード内のGitHubリポジトリ名(YOUR_...)が書き換えられていません。</span>";
-      return;
-    }
+  const enableWheelOnSlider = (slider, step) => {
+    slider.addEventListener('wheel', (e) => {
+      e.preventDefault(); 
+      const currentVal = parseFloat(slider.value);
+      if (e.deltaY < 0) { 
+        slider.value = Math.min(parseFloat(slider.max), currentVal + step);
+      } else { 
+        slider.value = Math.max(parseFloat(slider.min), currentVal - step);
+      }
+      slider.dispatchEvent(new Event('input')); 
+    });
+  };
 
+  enableWheelOnSlider(posSlider, 1);
+  enableWheelOnSlider(opacitySlider, 0.1);
+
+  closeBtn.addEventListener('click', () => {
+    window.close();
+  });
+
+  updateBtn.addEventListener('click', async () => {
     updateBtn.disabled = true;
     updateStatus.textContent = "確認中...";
     updateStatus.style.color = "#333";
 
     try {
-      // GitHubのRelease情報を取得
       const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
       if (!res.ok) throw new Error('取得失敗');
       
       const data = await res.json();
-      
-      // "v1.2" のようなタグ名から "v" を取り除く
       const latestVersion = data.tag_name.replace(/^v/, ''); 
       const currentVersion = chrome.runtime.getManifest().version;
 
-      // バージョンの比較（1.1 と 1.2 などを比較）
       if (latestVersion.localeCompare(currentVersion, undefined, { numeric: true, sensitivity: 'base' }) > 0) {
         updateStatus.innerHTML = `🎉 新バージョン (v${latestVersion}) があります！<br><a href="${data.html_url}" target="_blank" style="color: #1976d2; font-weight: bold; text-decoration: underline;">ダウンロードページを開く</a>`;
       } else {
         updateStatus.textContent = "最新バージョンをご利用中です。";
       }
     } catch (err) {
-      updateStatus.innerHTML = "<span style='color:red;'>確認に失敗しました。リポジトリが公開(Public)になっているか確認してください。</span>";
+      updateStatus.innerHTML = "<span style='color:red;'>確認に失敗しました。リポジトリが公開になっているか確認してください。</span>";
     } finally {
       updateBtn.disabled = false;
     }

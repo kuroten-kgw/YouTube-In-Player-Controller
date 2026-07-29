@@ -13,9 +13,12 @@
     
     .master-toggle { background: #f5f5f5; padding: 10px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 15px; }
     
+    .btn-yt { display: block; background: #f00; color: #fff; text-align: center; text-decoration: none; padding: 10px; border-radius: 4px; font-weight: bold; margin-bottom: 15px; font-size: 14px; transition: 0.2s; }
+    .btn-yt:hover { background: #c00; }
+
     button { color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; font-size: 14px; }
-    .btn-save { background: #000; margin-bottom: 15px; }
-    .btn-save:hover { background: #333; }
+    .btn-close { background: #555; margin-bottom: 15px; }
+    .btn-close:hover { background: #333; }
     .btn-update { background: #1976d2; padding: 8px; font-size: 13px; }
     .btn-update:hover { background: #1565c0; }
     
@@ -23,13 +26,20 @@
   </style>
 </head>
 <body>
-  <h3>設定 (v1.2)</h3>
+  <h3>設定 (v1.3)</h3>
+
+  <a href="https://www.youtube.com/" target="_blank" class="btn-yt">📺 YouTubeを開く</a>
 
   <div class="setting-group master-toggle">
     <label style="margin-bottom: 0;">
       <input type="checkbox" id="master-enable" style="transform: scale(1.2); margin-right: 5px;"> 
       拡張機能を有効にする (ON/OFF)
     </label>
+  </div>
+
+  <div class="setting-group">
+    <label for="pos-slider">UIの高さ (0:最下部 〜 100:最上部): <span id="pos-val">15</span></label>
+    <input type="range" id="pos-slider" min="0" max="100" step="1" value="15">
   </div>
 
   <div class="setting-group">
@@ -41,16 +51,13 @@
     <label>
       <input type="checkbox" id="nico-enable"> ニコニコ動画でもUIを表示
     </label>
-    <div class="note">
-      ※ニコニコ動画ではシーク時の同期バグ等の仕様があるため、初期設定は「OFF」です。
-    </div>
+    <div class="note">※ニコニコ動画ではシーク時の同期バグ等の仕様があるため、初期設定は「OFF」です。</div>
   </div>
 
-  <button class="btn-save" id="save-btn">保存して閉じる</button>
+  <button class="btn-close" id="close-btn">閉じる</button>
 
   <hr style="border: none; border-top: 1px dashed #ccc; margin-bottom: 15px;">
 
-  <!-- アップデート確認エリア -->
   <button class="btn-update" id="update-btn">🔄 最新アップデートを確認</button>
   <div id="update-status"></div>
 

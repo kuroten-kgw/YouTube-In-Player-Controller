@@ -1,27 +1,53 @@
 let originalSpeed = null;
 let smoothSeekEndTime = 0;
 
-// --- 拡張機能の設定データ ---
-let userSettings = { masterEnable: true, uiOpacity: 1.0, enableNico: false };
+let userSettings = { masterEnable: true, uiPosition: 15, uiOpacity: 1.0, enableNico: false };
 let settingsLoaded = false;
 
-// 設定の読み込みとリアルタイム監視
-chrome.storage.sync.get({ masterEnable: true, uiOpacity: 1.0, enableNico: false }, (items) => {
+function updateUIPosition() {
+  const container = document.getElementById('ypc-container');
+  const video = document.querySelector('video');
+  if (!container || !video) return;
+
+  let playerContainer = video.parentElement;
+  if (window.location.hostname.includes('youtube.com')) {
+    playerContainer = document.querySelector('.html5-video-player');
+  }
+
+  if (playerContainer) {
+    const playerHeight = playerContainer.clientHeight;
+    const uiHeight = container.offsetHeight || 50; 
+    
+    const minBottom = 60; 
+    const maxBottom = Math.max(minBottom, playerHeight - uiHeight - 10);
+
+    const posVal = Math.max(0, Math.min(100, userSettings.uiPosition));
+    const targetPx = minBottom + (maxBottom - minBottom) * (posVal / 100);
+
+    container.style.bottom = `${targetPx}px`;
+  }
+}
+
+// ★ local.get に変更
+chrome.storage.local.get({ masterEnable: true, uiPosition: 15, uiOpacity: 1.0, enableNico: false }, (items) => {
   userSettings = items;
   settingsLoaded = true;
   document.documentElement.style.setProperty('--ypc-hover-opacity', userSettings.uiOpacity);
-  
-  // ロード時にOFFなら即座に消す
   if (!userSettings.masterEnable) removePlayerUI();
+  else updateUIPosition();
 });
 
+// ★ area === 'local' に変更
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'sync') {
+  if (area === 'local') {
     if (changes.masterEnable) {
       userSettings.masterEnable = changes.masterEnable.newValue;
-      if (!userSettings.masterEnable) {
-        removePlayerUI(); // OFFにされた瞬間にUIを削除
-      }
+      if (!userSettings.masterEnable) removePlayerUI();
+      else injectPlayerUI();
+    }
+    if (changes.uiPosition) {
+      userSettings.uiPosition = changes.uiPosition.newValue;
+      updateUIPosition();
     }
     if (changes.uiOpacity) {
       userSettings.uiOpacity = changes.uiOpacity.newValue;
@@ -31,24 +57,21 @@ chrome.storage.onChanged.addListener((changes, area) => {
       userSettings.enableNico = changes.enableNico.newValue;
       if (!userSettings.enableNico && window.location.hostname.includes('nicovideo.jp')) {
         removePlayerUI();
+      } else if (userSettings.enableNico) {
+        injectPlayerUI();
       }
     }
   }
 });
 
-// UIを削除する関数
 function removePlayerUI() {
   const existingContainer = document.getElementById('ypc-container');
   if (existingContainer) existingContainer.remove();
 }
 
-
-// --- カクつきを防ぐ「スムーズシーク」機能 ---
 function performSmoothSeek(video, amount) {
   const now = Date.now();
-  if (originalSpeed === null) {
-    originalSpeed = video.playbackRate;
-  }
+  if (originalSpeed === null) originalSpeed = video.playbackRate;
   
   let tempSpeed;
   let timeNeededMs;
@@ -96,11 +119,8 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// --- UIをプレイヤー内に注入する機能 ---
 function injectPlayerUI() {
-  if (!settingsLoaded) return;
-  // ★マスター機能がOFFの場合は何もしない
-  if (!userSettings.masterEnable) return; 
+  if (!settingsLoaded || !userSettings.masterEnable) return; 
 
   const video = document.querySelector('video');
   if (!video) return;
@@ -125,16 +145,10 @@ function injectPlayerUI() {
 
   if (!video.dataset.ypcEventsBound) {
     video.dataset.ypcEventsBound = 'true';
-    
     video.addEventListener('loadedmetadata', () => {
-      if (localStorage.getItem('ypc-auto-loop') === 'true') {
-        video.loop = true;
-      }
+      if (localStorage.getItem('ypc-auto-loop') === 'true') video.loop = true;
     });
-
-    if (localStorage.getItem('ypc-auto-loop') === 'true') {
-      video.loop = true;
-    }
+    if (localStorage.getItem('ypc-auto-loop') === 'true') video.loop = true;
 
     if (isYouTube) {
       video.addEventListener('ratechange', () => {
@@ -146,7 +160,6 @@ function injectPlayerUI() {
         }
       });
     }
-
     video.addEventListener('play', () => {
       const btn = document.getElementById('ypc-play-pause');
       if (btn) btn.innerText = '⏸';
@@ -228,6 +241,38 @@ function injectPlayerUI() {
         width: 100px;
         accent-color: #f00;
       }
+
+      .ypc-loop-group-yt {
+        margin-left: auto;
+        border-left: 1px solid #555;
+        padding-left: 20px;
+      }
+
+      #ypc-container.ypc-compact {
+        width: 90%; 
+        padding: 10px 15px;
+        gap: 10px;
+      }
+      #ypc-container.ypc-compact .ypc-row {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+      }
+      #ypc-container.ypc-compact .ypc-group {
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+      }
+      #ypc-container.ypc-compact .ypc-btn {
+        flex: 1 1 auto;
+        padding: 12px 5px;
+        text-align: center;
+      }
+      #ypc-container.ypc-compact .ypc-loop-group-yt {
+        margin-left: 0;
+        border-left: none;
+        padding-left: 0;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -245,17 +290,17 @@ function injectPlayerUI() {
       <button class="ypc-btn" id="ypc-speed-down">-0.01</button>
       <span id="ypc-speed-display" style="width: 48px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15px; font-weight: bold;">1.00x</span>
       <button class="ypc-btn" id="ypc-speed-up">+0.01</button>
-      <input type="range" id="ypc-speed-slider" min="0.1" max="4.0" step="0.01" value="1.0" style="margin-left: 8px;">
+      <input type="range" id="ypc-speed-slider" min="0.1" max="4.0" step="0.01" value="1.0" style="margin-left: 8px; flex: 1;">
       <button class="ypc-btn" id="ypc-speed-reset">Reset</button>
     </div>
   ` : '';
 
-  const loopBorderStyle = isYouTube ? "border-left: 1px solid #555; padding-left: 20px;" : "";
+  const loopGroupClass = isYouTube ? "ypc-group ypc-loop-group-yt" : "ypc-group";
 
   container.innerHTML = `
     <div class="ypc-row">
-      <button class="ypc-btn" id="ypc-play-pause" style="width: 40px;">▶</button>
-      <div class="ypc-group">
+      <button class="ypc-btn" id="ypc-play-pause" style="min-width: 40px; flex: 0 0 auto;">▶</button>
+      <div class="ypc-group" style="flex: 1;">
         <span class="ypc-label">Adjust:</span>
         <button class="ypc-btn ypc-seek" data-val="-5">-5s</button>
         <button class="ypc-btn ypc-seek" data-val="5">+5s</button>
@@ -267,7 +312,7 @@ function injectPlayerUI() {
     </div>
     <div class="ypc-row">
       ${speedUI}
-      <div class="ypc-group" style="${loopBorderStyle} margin-left: auto;">
+      <div class="${loopGroupClass}">
         <button class="ypc-btn" id="ypc-loop-toggle" style="min-width: 90px;">Loop: OFF</button>
       </div>
     </div>
@@ -275,14 +320,23 @@ function injectPlayerUI() {
 
   playerContainer.appendChild(container);
 
+  setTimeout(updateUIPosition, 50);
+
   const resizeObserver = new ResizeObserver(entries => {
     for (let entry of entries) {
       const width = entry.contentRect.width;
-      let scale = width / 800;
-      if (scale > 1.0) scale = 1.0;
-      if (scale < 0.5) scale = 0.5;
       
-      container.style.transform = `translateX(-50%) scale(${scale})`;
+      if (width < 650) {
+        container.classList.add('ypc-compact');
+        container.style.transform = `translateX(-50%) scale(1.0)`;
+      } else {
+        container.classList.remove('ypc-compact');
+        let scale = width / 800;
+        if (scale > 1.0) scale = 1.0;
+        if (scale < 0.6) scale = 0.6;
+        container.style.transform = `translateX(-50%) scale(${scale})`;
+      }
+      updateUIPosition();
     }
   });
   resizeObserver.observe(playerContainer);
@@ -290,11 +344,8 @@ function injectPlayerUI() {
   const playPauseBtn = container.querySelector('#ypc-play-pause');
   playPauseBtn.innerText = video.paused ? '▶' : '⏸'; 
   playPauseBtn.addEventListener('click', () => {
-    if (video.paused) {
-      video.play();
-    } else {
-      video.pause();
-    }
+    if (video.paused) video.play();
+    else video.pause();
   });
 
   container.querySelectorAll('.ypc-seek').forEach(btn => {
@@ -317,11 +368,9 @@ function injectPlayerUI() {
       if (newSpeed < 0.1) newSpeed = 0.1;
       if (newSpeed > 16.0) newSpeed = 16.0;
 
-      if (originalSpeed !== null) {
-        originalSpeed = newSpeed;
-      } else {
-        video.playbackRate = newSpeed;
-      }
+      if (originalSpeed !== null) originalSpeed = newSpeed;
+      else video.playbackRate = newSpeed;
+      
       speedDisplay.innerText = newSpeed.toFixed(2) + 'x';
       speedSlider.value = newSpeed;
     };
@@ -339,11 +388,8 @@ function injectPlayerUI() {
     speedSlider.addEventListener('wheel', (e) => {
       e.preventDefault(); 
       const currentSpeed = originalSpeed !== null ? originalSpeed : video.playbackRate;
-      if (e.deltaY < 0) {
-        updateSpeed(currentSpeed + 0.01); 
-      } else {
-        updateSpeed(currentSpeed - 0.01); 
-      }
+      if (e.deltaY < 0) updateSpeed(currentSpeed + 0.01); 
+      else updateSpeed(currentSpeed - 0.01); 
     });
   }
 
