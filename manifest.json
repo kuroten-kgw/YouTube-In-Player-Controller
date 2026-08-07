@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube In-Player Controller",
-  "version": "1.3",
+  "version": "1.4",
   "description": "YouTubeとニコニコ動画の再生画面内に、専用コントローラーを追加します。",
   "permissions": [
     "storage"

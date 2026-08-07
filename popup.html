@@ -6,7 +6,7 @@
   <style>
     body { font-family: "YouTube Noto", Roboto, sans-serif; padding: 15px; width: 300px; color: #333; margin: 0; }
     h3 { margin-top: 0; border-bottom: 2px solid #f00; padding-bottom: 8px; font-size: 16px; margin-bottom: 15px; }
-    .setting-group { margin-bottom: 20px; }
+    .setting-group { margin-bottom: 18px; }
     label { display: block; font-weight: bold; margin-bottom: 5px; cursor: pointer; font-size: 14px; }
     .note { font-size: 11px; color: #d32f2f; margin-top: 6px; line-height: 1.4; background: #ffebee; padding: 8px; border-radius: 4px; }
     input[type="range"] { width: 100%; cursor: pointer; accent-color: #f00; }
@@ -26,7 +26,7 @@
   </style>
 </head>
 <body>
-  <h3>設定 (v1.3)</h3>
+  <h3>設定 (v1.4)</h3>
 
   <a href="https://www.youtube.com/" target="_blank" class="btn-yt">📺 YouTubeを開く</a>
 
@@ -46,6 +46,21 @@
     <label for="opacity-slider">UIの透明度: <span id="opacity-val">1.0</span></label>
     <input type="range" id="opacity-slider" min="0.1" max="1.0" step="0.1" value="1.0">
   </div>
+  
+  <hr style="border: none; border-top: 1px dashed #ccc; margin-bottom: 15px;">
+
+  <div class="setting-group">
+    <label>
+      <input type="checkbox" id="third-row-enable"> 🎛️ A-B Loop / HOT CUE (3列目) を表示
+    </label>
+  </div>
+
+  <div class="setting-group">
+    <label for="quick-loop-slider">即時ループの間隔: <span id="quick-loop-val">10</span>秒</label>
+    <input type="range" id="quick-loop-slider" min="1" max="60" step="1" value="10">
+  </div>
+
+  <hr style="border: none; border-top: 1px dashed #ccc; margin-bottom: 15px;">
 
   <div class="setting-group">
     <label>
